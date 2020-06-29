@@ -63,14 +63,7 @@ tensorboard --logdir ./logs/
 *This repository supports datasets, including MNIST, CIFAR, Fashion-MNIST, LSUN, 32x32-ImageNet
 ---
 
-<img src="images/CIFAR-10.png" width="800">
-
-
-<img src="images/Fashion-MNIST.png" width="770">
-
-<img src="images/MNIST.png" width="800">
-
-
+<img src="images/comparsion.jpg" width="800">
 
 *Inception score*
 ---
