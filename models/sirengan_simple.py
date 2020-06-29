@@ -7,37 +7,64 @@ from utils.tensorboard_logger import Logger
 from utils.inception_score import get_inception_score
 from itertools import chain
 from torchvision import utils
+import numpy as np
+def weights_init(m):
+    if type(m) is nn.Linear:
+        fan_in = m.weight.shape[1] 
+        m.weight.data.uniform_(-np.sqrt(6/fan_in), np.sqrt(6/fan_in)) 
+        m.bias.data.uniform_(-1/fan_in, 1/fan_in)
+
+class Siren(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self,x):
+        return torch.sin(x)
 
 class Generator(torch.nn.Module):
     def __init__(self, channels):
         super().__init__()
-        # Filters [1024, 512, 256]
         # Input_dim = 100
         # Output_dim = C (number of channels)
-        self.main_module = nn.Sequential(
+        self.activation = Siren
+        self.main_module = nn.DataParallel(nn.Sequential(
             # Z latent vector 100
-            nn.ConvTranspose2d(in_channels=100, out_channels=1024, kernel_size=4, stride=1, padding=0),
-            nn.BatchNorm2d(num_features=1024),
-            nn.ReLU(True),
+            nn.Linear(102, 256),
+            nn.BatchNorm1d(num_features=256),
+            self.activation(),
 
-            # State (1024x4x4)
-            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(num_features=512),
-            nn.ReLU(True),
-
-            # State (512x8x8)
-            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(num_features=256),
-            nn.ReLU(True),
-
-            # State (256x16x16)
-            nn.ConvTranspose2d(in_channels=256, out_channels=channels, kernel_size=4, stride=2, padding=1))
+            nn.Linear(256, 512),
+            nn.BatchNorm1d(num_features = 512),
+            self.activation(),
+            
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(num_features=256),
+            self.activation(),
+             
+            nn.Linear(256,channels)
+            ))
             # output of main module --> Image (Cx32x32)
+        #self.main_module.apply(weights_init)
+        #self.output = nn.Tanh()
+        self.output = Siren()
+        self.img_dim = 32
+        self.channels = channels
 
-        self.output = nn.Tanh()
+        # assign the grid with input value
+        grid = np.zeros((self.img_dim * self.img_dim, 2))
+        for i in range(self.img_dim):
+            for j in range(self.img_dim):
+                grid[i * self.img_dim + j][0] = -1 + (2/self.img_dim) * i 
+                grid[i * self.img_dim + j][1] = -1 + (2/self.img_dim) * j
+        self.grid = torch.from_numpy(grid).float().cuda()
 
     def forward(self, x):
+        batch_size = x.shape[0]
+        x = torch.repeat_interleave(x, self.img_dim * self.img_dim, dim = 0)
+        grid = self.grid.repeat((batch_size, 1))
+        x = torch.cat([x, grid], dim = -1)
         x = self.main_module(x)
+        x = x.view(batch_size, self.img_dim, self.img_dim, self.channels)
+        x = x.permute(0, 3, 1, 2)
         return self.output(x)
 
 
@@ -77,9 +104,9 @@ class Discriminator(torch.nn.Module):
         x = self.main_module(x)
         return x.view(-1, 1024*4*4)
 
-class DCGAN_MODEL(object):
+class SIREN_GAN_MODEL(object):
     def __init__(self, args):
-        print("DCGAN model initalization.")
+        print("SIREN GAN model initalization.")
         self.G = Generator(args.channels)
         self.D = Discriminator(args.channels)
         self.C = args.channels
@@ -128,7 +155,7 @@ class DCGAN_MODEL(object):
                 if i == train_loader.dataset.__len__() // self.batch_size:
                     break
 
-                z = torch.rand((self.batch_size, 100, 1, 1))
+                z = torch.rand((self.batch_size, 100))
                 real_labels = torch.ones(self.batch_size)
                 fake_labels = torch.zeros(self.batch_size)
 
@@ -148,9 +175,9 @@ class DCGAN_MODEL(object):
 
                 # Compute BCE Loss using fake images
                 if self.cuda:
-                    z = Variable(torch.randn(self.batch_size, 100, 1, 1)).cuda(self.cuda_index)
+                    z = Variable(torch.randn(self.batch_size, 100)).cuda(self.cuda_index)
                 else:
-                    z = Variable(torch.randn(self.batch_size, 100, 1, 1))
+                    z = Variable(torch.randn(self.batch_size, 100))
                 fake_images = self.G(z)
                 outputs = self.D(fake_images)
                 d_loss_fake = self.loss(outputs, fake_labels)
@@ -165,9 +192,9 @@ class DCGAN_MODEL(object):
                 # Train generator
                 # Compute loss with fake images
                 if self.cuda:
-                    z = Variable(torch.randn(self.batch_size, 100, 1, 1)).cuda(self.cuda_index)
+                    z = Variable(torch.randn(self.batch_size, 100)).cuda(self.cuda_index)
                 else:
-                    z = Variable(torch.randn(self.batch_size, 100, 1, 1))
+                    z = Variable(torch.randn(self.batch_size, 100))
                 fake_images = self.G(z)
                 outputs = self.D(fake_images)
                 g_loss = self.loss(outputs, real_labels)
@@ -199,16 +226,16 @@ class DCGAN_MODEL(object):
                     print('Epoch-{}'.format(epoch + 1))
                     self.save_model()
 
-                    if not os.path.exists('training_result_images/'+ self.dataset + '/dcgan/'):
-                        os.makedirs('training_result_images/' + self.dataset + '/dcgan/')
+                    if not os.path.exists('training_result_images/'+ self.dataset + '/siren_gan/'):
+                        os.makedirs('training_result_images/' + self.dataset + '/siren_gan/')
 
                     # Denormalize images and save them in grid 8x8
-                    z = Variable(torch.randn(800, 100, 1, 1)).cuda(self.cuda_index)
+                    z = Variable(torch.randn(800, 100)).cuda(self.cuda_index)
                     samples = self.G(z)
                     samples = samples.mul(0.5).add(0.5)
                     samples = samples.data.cpu()[:64]
                     grid = utils.make_grid(samples)
-                    utils.save_image(grid, 'training_result_images/'+self.dataset+'/dcgan/img_generatori_iter_{}.png'.format(str(generator_iter).zfill(3)))
+                    utils.save_image(grid, 'training_result_images/'+self.dataset+'/siren_gan/img_generatori_iter_{}.png'.format(str(generator_iter).zfill(3)))
 
                     time = t.time() - self.t_begin
                     #print("Inception score: {}".format(inception_score))
@@ -224,7 +251,7 @@ class DCGAN_MODEL(object):
                     print("Epoch: [%2d] [%4d/%4d] D_loss: %.8f, G_loss: %.8f" %
                           ((epoch + 1), (i + 1), train_loader.dataset.__len__() // self.batch_size, d_loss.item(), g_loss.item()))
 
-                    z = Variable(torch.randn(self.batch_size, 100, 1, 1).cuda(self.cuda_index))
+                    z = Variable(torch.randn(self.batch_size, 100).cuda(self.cuda_index))
 
                     # TensorBoard logging
                     # Log the scalar values
@@ -261,13 +288,13 @@ class DCGAN_MODEL(object):
 
     def evaluate(self, test_loader, D_model_path, G_model_path):
         self.load_model(D_model_path, G_model_path)
-        z = Variable(torch.randn(self.batch_size, 100, 1, 1)).cuda(self.cuda_index)
+        z = Variable(torch.randn(self.batch_size, 100)).cuda(self.cuda_index)
         samples = self.G(z)
         samples = samples.mul(0.5).add(0.5)
         samples = samples.data.cpu()
         grid = utils.make_grid(samples)
-        print("Grid of 8x8 images saved to 'dgan_model_image.png'.")
-        utils.save_image(grid, self.dataset + '_dcgan_model_image.png')
+        print("Grid of 8x8 images saved to 'siren_gan_model_image.png'.")
+        utils.save_image(grid, self.dataset + '_siren_gan_model_image.png')
 
     def real_images(self, images, number_of_images):
         if (self.C == 3):
@@ -289,11 +316,11 @@ class DCGAN_MODEL(object):
         return x.data.cpu().numpy()
 
     def save_model(self):
-        if not os.path.exists('./checkpoints/'+self.dataset + '/dcgan/'):
-            os.makedirs('./checkpoints/'+self.dataset + '/dcgan/')
-        torch.save(self.G.state_dict(), './checkpoints/'+self.dataset + '/dcgan/generator.pkl')
-        torch.save(self.D.state_dict(), './checkpoints/'+ self.dataset + '/dcgan/discriminator.pkl')
-        print('Models save to ./checkpoints/' + self.dataset + '/dcgan/generator.pkl & ./checkpoints/' + self.dataset + '/dcgan/discriminator.pkl ')
+        if not os.path.exists('./checkpoints/'+self.dataset + '/siren_gan/'):
+            os.makedirs('./checkpoints/'+self.dataset + '/siren_gan/')
+        torch.save(self.G.state_dict(), './checkpoints/'+self.dataset + '/siren_gan/generator.pkl')
+        torch.save(self.D.state_dict(), './checkpoints/'+ self.dataset + '/siren_gan/discriminator.pkl')
+        print('Models save to ./checkpoints/' + self.dataset + '/siren_gan/generator.pkl & ./checkpoints/' + self.dataset + '/siren_gan/discriminator.pkl ')
 
     def load_model(self, D_model_filename, G_model_filename):
         D_model_path = os.path.join(os.getcwd(), D_model_filename)
@@ -304,8 +331,8 @@ class DCGAN_MODEL(object):
         print('Discriminator model loaded from {}-'.format(D_model_path))
 
     def generate_latent_walk(self, number):
-        if not os.path.exists('interpolated_images/'+self.dataset + '/dcgan/'):
-            os.makedirs('interpolated_images/'+self.dataset + '/dcgan/')
+        if not os.path.exists('interpolated_images/'+self.dataset + '/siren_gan/'):
+            os.makedirs('interpolated_images/'+self.dataset + '/siren_gan/')
 
         # Interpolate between twe noise(z1, z2) with number_int steps between
         number_int = 10
@@ -329,5 +356,5 @@ class DCGAN_MODEL(object):
             images.append(fake_im.view(self.C,32,32).data.cpu())
 
         grid = utils.make_grid(images, nrow=number_int )
-        utils.save_image(grid, 'interpolated_images/'+self.dataset+'/dcgan/interpolated_{}.png'.format(str(number).zfill(3)))
-        print("Saved interpolated images to interpolated_images/"+ self.dataset + "/dcgan/interpolated_{}.".format(str(number).zfill(3)))
+        utils.save_image(grid, 'interpolated_images/'+self.dataset+'/siren_gan/interpolated_{}.png'.format(str(number).zfill(3)))
+        print("Saved interpolated images to interpolated_images/"+ self.dataset + "/siren_gan/interpolated_{}.".format(str(number).zfill(3)))

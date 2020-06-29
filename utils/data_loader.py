@@ -7,25 +7,25 @@ def get_data_loader(args):
 
     if args.dataset == 'mnist':
         trans = transforms.Compose([
-            transforms.Scale(32),
+            transforms.Resize(32),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            transforms.Normalize((0.5,), (0.5,)),
         ])
         train_dataset = MNIST(root=args.dataroot, train=True, download=args.download, transform=trans)
         test_dataset = MNIST(root=args.dataroot, train=False, download=args.download, transform=trans)
 
     elif args.dataset == 'fashion-mnist':
         trans = transforms.Compose([
-            transforms.Scale(32),
+            transforms.Resize(32),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            transforms.Normalize((0.5,), (0.5,)),
         ])
         train_dataset = FashionMNIST(root=args.dataroot, train=True, download=args.download, transform=trans)
         test_dataset = FashionMNIST(root=args.dataroot, train=False, download=args.download, transform=trans)
 
     elif args.dataset == 'cifar':
         trans = transforms.Compose([
-            transforms.Scale(32),
+            transforms.Resize(32),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
@@ -37,11 +37,26 @@ def get_data_loader(args):
         trans = transforms.Compose([
             transforms.Resize(32),
             transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
         train_dataset = dset.STL10(root=args.dataroot, train=True, download=args.download, transform=trans)
         test_dataset = dset.STL10(root=args.dataroot, train=False, download=args.download, transform=trans)
-
-
+    elif args.dataset == 'lsun':
+        trans = transforms.Compose([
+            transforms.Resize(32),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+        train_dataset = dset.LSUN(root = args.dataroot, classes=['bedroom_train'], transform=trans)
+        test_dataset = dset.LSUN(root = args.dataroot, classes=['bedroom_val'], transform=trans)
+    elif args.dataset == 'imagenet':
+        trans = transforms.Compose([
+            transforms.Resize(32),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+        train_dataset = dset.ImageFolder(root=args.dataroot,transfrom = trans)
+        test_dataset = dset.ImageFolder(root=args.dataroot, transform = trans)
     # Check if everything is ok with loading datasets
     assert train_dataset
     assert test_dataset

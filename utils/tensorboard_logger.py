@@ -1,7 +1,10 @@
 # Code referenced from https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import scipy.misc
+from PIL import Image
 from io import BytesIO
 
 
@@ -26,7 +29,11 @@ class Logger(object):
                 s = StringIO()
             except:
                 s = BytesIO()
-            scipy.misc.toimage(img).save(s, format="png")
+            try:
+                Image.fromarray(((img + 1) / 2 * 255).astype(np.uint8)).save(s, format = "PNG")
+            except:
+                img = np.transpose(img, (1,2,0))
+                Image.fromarray(((img + 1) / 2 * 255).astype(np.uint8)).convert('RGB').save(s, format = "PNG")
 
             # Create an Image object
             img_sum = tf.Summary.Image(encoded_image_string=s.getvalue(),

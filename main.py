@@ -3,9 +3,12 @@ from utils.data_loader import get_data_loader
 
 from models.gan import GAN
 from models.dcgan import DCGAN_MODEL
+from models.dcgan_siren import DCGAN_SIREN_MODEL
+from models.hypergan_siren import HYPERGAN_SIREN_MODEL 
+from models.sirengan import SIREN_GAN_MODEL
+from models.relugan import RELU_GAN_MODEL
 from models.wgan_clipping import WGAN_CP
 from models.wgan_gradient_penalty import WGAN_GP
-
 
 def main(args):
     model = None
@@ -13,10 +16,18 @@ def main(args):
         model = GAN(args)
     elif args.model == 'DCGAN':
         model = DCGAN_MODEL(args)
+    elif args.model == 'DCGAN-SIREN':
+        model = DCGAN_SIREN_MODEL(args)
+    elif args.model == 'HYPERGAN-SIREN':
+        model = HYPERGAN_SIREN_MODEL(args)
+    elif args.model == 'SIREN-GAN':
+        model = SIREN_GAN_MODEL(args)
+    elif args.model == 'RELU-GAN':
+        model = RELU_GAN_MODEL(args)
     elif args.model == 'WGAN-CP':
         model = WGAN_CP(args)
     elif args.model == 'WGAN-GP':
-        model =  model = WGAN_GP(args)
+        model = WGAN_GP(args)
     else:
         print("Model type non-existing. Try again.")
         exit(-1)
@@ -38,5 +49,6 @@ def main(args):
 
 if __name__ == '__main__':
     args = parse_args()
+    print(args.channels)
     print(args.cuda)
     main(args)

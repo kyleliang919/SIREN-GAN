@@ -8,6 +8,12 @@ from utils.inception_score import get_inception_score
 from itertools import chain
 from torchvision import utils
 
+class Siren(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self,x):
+        return torch.sin(x)
+
 class Generator(torch.nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -18,17 +24,17 @@ class Generator(torch.nn.Module):
             # Z latent vector 100
             nn.ConvTranspose2d(in_channels=100, out_channels=1024, kernel_size=4, stride=1, padding=0),
             nn.BatchNorm2d(num_features=1024),
-            nn.ReLU(True),
+            Siren(),
 
             # State (1024x4x4)
             nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(num_features=512),
-            nn.ReLU(True),
+            Siren(),
 
             # State (512x8x8)
             nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(num_features=256),
-            nn.ReLU(True),
+            Siren(),
 
             # State (256x16x16)
             nn.ConvTranspose2d(in_channels=256, out_channels=channels, kernel_size=4, stride=2, padding=1))
@@ -77,9 +83,9 @@ class Discriminator(torch.nn.Module):
         x = self.main_module(x)
         return x.view(-1, 1024*4*4)
 
-class DCGAN_MODEL(object):
+class DCGAN_SIREN_MODEL(object):
     def __init__(self, args):
-        print("DCGAN model initalization.")
+        print("DCGAN SIREN model initalization.")
         self.G = Generator(args.channels)
         self.D = Discriminator(args.channels)
         self.C = args.channels
@@ -199,8 +205,8 @@ class DCGAN_MODEL(object):
                     print('Epoch-{}'.format(epoch + 1))
                     self.save_model()
 
-                    if not os.path.exists('training_result_images/'+ self.dataset + '/dcgan/'):
-                        os.makedirs('training_result_images/' + self.dataset + '/dcgan/')
+                    if not os.path.exists('training_result_images/'+ self.dataset + '/dcgan_siren/'):
+                        os.makedirs('training_result_images/' + self.dataset + '/dcgan_siren/')
 
                     # Denormalize images and save them in grid 8x8
                     z = Variable(torch.randn(800, 100, 1, 1)).cuda(self.cuda_index)
@@ -208,7 +214,7 @@ class DCGAN_MODEL(object):
                     samples = samples.mul(0.5).add(0.5)
                     samples = samples.data.cpu()[:64]
                     grid = utils.make_grid(samples)
-                    utils.save_image(grid, 'training_result_images/'+self.dataset+'/dcgan/img_generatori_iter_{}.png'.format(str(generator_iter).zfill(3)))
+                    utils.save_image(grid, 'training_result_images/'+self.dataset+'/dcgan_siren/img_generatori_iter_{}.png'.format(str(generator_iter).zfill(3)))
 
                     time = t.time() - self.t_begin
                     #print("Inception score: {}".format(inception_score))
@@ -267,7 +273,7 @@ class DCGAN_MODEL(object):
         samples = samples.data.cpu()
         grid = utils.make_grid(samples)
         print("Grid of 8x8 images saved to 'dgan_model_image.png'.")
-        utils.save_image(grid, self.dataset + '_dcgan_model_image.png')
+        utils.save_image(grid, self.dataset + '_dcgan_siren_model_image.png')
 
     def real_images(self, images, number_of_images):
         if (self.C == 3):
@@ -289,11 +295,11 @@ class DCGAN_MODEL(object):
         return x.data.cpu().numpy()
 
     def save_model(self):
-        if not os.path.exists('./checkpoints/'+self.dataset + '/dcgan/'):
-            os.makedirs('./checkpoints/'+self.dataset + '/dcgan/')
-        torch.save(self.G.state_dict(), './checkpoints/'+self.dataset + '/dcgan/generator.pkl')
-        torch.save(self.D.state_dict(), './checkpoints/'+ self.dataset + '/dcgan/discriminator.pkl')
-        print('Models save to ./checkpoints/' + self.dataset + '/dcgan/generator.pkl & ./checkpoints/' + self.dataset + '/dcgan/discriminator.pkl ')
+        if not os.path.exists('./checkpoints/'+self.dataset + '/dcgan_siren/'):
+            os.makedirs('./checkpoints/'+self.dataset + '/dcgan_siren/')
+        torch.save(self.G.state_dict(), './checkpoints/'+self.dataset + '/dcgan_siren/generator.pkl')
+        torch.save(self.D.state_dict(), './checkpoints/'+ self.dataset + '/dcgan_siren/discriminator.pkl')
+        print('Models save to ./checkpoints/' + self.dataset + '/dcgan_siren/generator.pkl & ./checkpoints/' + self.dataset + '/dcgan_siren/discriminator.pkl ')
 
     def load_model(self, D_model_filename, G_model_filename):
         D_model_path = os.path.join(os.getcwd(), D_model_filename)
@@ -304,8 +310,8 @@ class DCGAN_MODEL(object):
         print('Discriminator model loaded from {}-'.format(D_model_path))
 
     def generate_latent_walk(self, number):
-        if not os.path.exists('interpolated_images/'+self.dataset + '/dcgan/'):
-            os.makedirs('interpolated_images/'+self.dataset + '/dcgan/')
+        if not os.path.exists('interpolated_images/'+self.dataset + '/dcgan_siren/'):
+            os.makedirs('interpolated_images/'+self.dataset + '/dcgan_siren/')
 
         # Interpolate between twe noise(z1, z2) with number_int steps between
         number_int = 10
@@ -329,5 +335,5 @@ class DCGAN_MODEL(object):
             images.append(fake_im.view(self.C,32,32).data.cpu())
 
         grid = utils.make_grid(images, nrow=number_int )
-        utils.save_image(grid, 'interpolated_images/'+self.dataset+'/dcgan/interpolated_{}.png'.format(str(number).zfill(3)))
-        print("Saved interpolated images to interpolated_images/"+ self.dataset + "/dcgan/interpolated_{}.".format(str(number).zfill(3)))
+        utils.save_image(grid, 'interpolated_images/'+self.dataset+'/dcgan_siren/interpolated_{}.png'.format(str(number).zfill(3)))
+        print("Saved interpolated images to interpolated_images/"+ self.dataset + "/dcgan_siren/interpolated_{}.".format(str(number).zfill(3)))
